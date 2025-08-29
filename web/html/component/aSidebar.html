@@ -6,7 +6,7 @@
             <a-theme-switch></a-theme-switch>
             <a-menu :theme="themeSwitcher.currentTheme" mode="inline" :selected-keys="activeTab"
                 @click="({key}) => openLink(key)">
-                <a-menu-item v-for="tab in tabs" :key="tab.key">
+                <a-menu-item v-for="tab in tabs" v-if="!tab.requireMultiServer || multiServerEnabled" :key="tab.key">
                     <a-icon :type="tab.icon"></a-icon>
                     <span v-text="tab.title"></span>
                 </a-menu-item>
@@ -20,7 +20,7 @@
             <a-theme-switch></a-theme-switch>
             <a-menu :theme="themeSwitcher.currentTheme" mode="inline" :selected-keys="activeTab"
                 @click="({key}) => openLink(key)">
-                <a-menu-item v-for="tab in tabs" :key="tab.key">
+                <a-menu-item v-for="tab in tabs" v-if="!tab.requireMultiServer || multiServerEnabled" :key="tab.key">
                     <a-icon :type="tab.icon"></a-icon>
                     <span v-text="tab.title"></span>
                 </a-menu-item>
@@ -55,6 +55,12 @@
                         title: '{{ i18n "menu.inbounds"}}'
                     },
                     {
+                        key: '{{ .base_path }}panel/nodes',
+                        icon: 'cluster',
+                        title: '{{ i18n "menu.nodes"}}',
+                        requireMultiServer: true
+                    },
+                    {
                         key: '{{ .base_path }}panel/settings',
                         icon: 'setting',
                         title: '{{ i18n "menu.settings"}}'
@@ -75,6 +81,7 @@
                 ],
                 visible: false,
                 collapsed: JSON.parse(localStorage.getItem(SIDEBAR_COLLAPSED_KEY)),
+                multiServerEnabled: false,
             }
         },
         methods: {
@@ -96,6 +103,13 @@
                     this.collapsed = JSON.parse(localStorage.getItem(SIDEBAR_COLLAPSED_KEY));
                 }
             }
+        },
+        mounted() {
+            HttpUtil.post('/panel/setting/all').then(msg => {
+                if (msg.success) {
+                    this.multiServerEnabled = msg.obj.multiServer;
+                }
+            });
         },
         template: `{{template "component/sidebar/content"}}`,
     });

@@ -25,6 +25,7 @@
 "none" = "None"
 "qrCode" = "QR Code"
 "info" = "More Information"
+"operate" = "Operate"
 "edit" = "Edit"
 "delete" = "Delete"
 "reset" = "Reset"
@@ -77,6 +78,7 @@
 "ultraDark" = "Ultra Dark"
 "dashboard" = "Overview"
 "inbounds" = "Inbounds"
+"nodes" = "Nodes"
 "settings" = "Panel Settings"
 "xray" = "Xray Configs"
 "logout" = "Log Out"
@@ -736,3 +738,6 @@
 "askToAddUserId" = "Your configuration is not found!\r\nPlease ask your admin to use your Telegram ChatID in your configuration(s).\r\n\r\nYour ChatID: <code>{{ .TgUserID }}</code>"
 "chooseClient" = "Choose a Client for Inbound {{ .Inbound }}"
 "chooseInbound" = "Choose an Inbound"
+
+[pages.nodes]
+"title" = "Nodes"
