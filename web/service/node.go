@@ -2,6 +2,9 @@ package service
 
 import (
 	"errors"
+	"fmt"
+	"net/http"
+	"strings"
 
 	"x-ui/database"
 	"x-ui/database/model"
@@ -22,6 +25,9 @@ func (s *NodeService) List() ([]model.Node, error) {
 func (s *NodeService) Create(name, apiURL, apiKey string) error {
 	db := database.GetDB()
 	node := &model.Node{Name: name, ApiURL: apiURL, ApiKey: apiKey}
+	if err := s.Check(node); err != nil {
+		return err
+	}
 	return db.Create(node).Error
 }
 
@@ -47,6 +53,9 @@ func (s *NodeService) Update(id int, name, apiURL, apiKey string) error {
 	node.Name = name
 	node.ApiURL = apiURL
 	node.ApiKey = apiKey
+	if err := s.Check(node); err != nil {
+		return err
+	}
 	return db.Save(node).Error
 }
 
@@ -58,6 +67,38 @@ func (s *NodeService) Delete(id int) error {
 	}
 	if res.RowsAffected == 0 {
 		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
+// Check pings the node API and updates its online status.
+func (s *NodeService) Check(node *model.Node) error {
+	if node == nil {
+		return errors.New("node is nil")
+	}
+	url := strings.TrimRight(node.ApiURL, "/") + "/ping"
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		node.Online = false
+		return err
+	}
+	if node.ApiKey != "" {
+		req.Header.Set("Authorization", node.ApiKey)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		node.Online = false
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		node.Online = false
+		return fmt.Errorf("ping failed: %s", resp.Status)
+	}
+	node.Online = true
+	if node.Id != 0 {
+		db := database.GetDB()
+		db.Model(node).Update("online", node.Online)
 	}
 	return nil
 }

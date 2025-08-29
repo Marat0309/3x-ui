@@ -6,4 +6,5 @@ type Node struct {
 	Name   string `json:"name"`
 	ApiURL string `json:"apiUrl"`
 	ApiKey string `json:"apiKey"`
+	Online bool   `json:"online"`
 }
