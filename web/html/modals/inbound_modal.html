@@ -52,6 +52,7 @@
         data: {
             inModal: inModal,
             delayedStart: false,
+            nodes: [],
             get inbound() {
                 return inModal.inbound;
             },
@@ -88,6 +89,13 @@
                     inModal.inbound.stream.externalProxy = [];
                 }
             }
+        },
+        mounted() {
+            HttpUtil.get('/nodes').then(msg => {
+                if (msg.success) {
+                    this.nodes = msg.obj || [];
+                }
+            });
         },
         methods: {
             streamNetworkChange() {
