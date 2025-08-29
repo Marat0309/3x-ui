@@ -94,7 +94,7 @@ func (a *NodeController) update(c *gin.Context) {
 		pureJsonMsg(c, http.StatusInternalServerError, false, err.Error())
 		return
 	}
-	pureJsonMsg(c, http.StatusOK, true, "")
+	c.Status(http.StatusNoContent)
 }
 
 func (a *NodeController) delete(c *gin.Context) {
