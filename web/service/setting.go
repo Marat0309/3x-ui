@@ -33,6 +33,7 @@ var defaultValueMap = map[string]string{
 	"secret":                      random.Seq(32),
 	"webBasePath":                 "/",
 	"multiServer":                 "false",
+	"multiServerEnable":           "false",
 	"sessionMaxAge":               "360",
 	"pageSize":                    "50",
 	"expireDiff":                  "0",
@@ -529,11 +530,11 @@ func (s *SettingService) SetExternalTrafficInformURI(InformURI string) error {
 }
 
 func (s *SettingService) GetMultiServerEnabled() (bool, error) {
-	return s.getBool("multiServer")
+	return s.getBool("multiServerEnable")
 }
 
 func (s *SettingService) SetMultiServerEnabled(value bool) error {
-	return s.setBool("multiServer", value)
+	return s.setBool("multiServerEnable", value)
 }
 
 func (s *SettingService) GetIpLimitEnable() (bool, error) {
