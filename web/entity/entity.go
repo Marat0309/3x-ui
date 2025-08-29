@@ -23,6 +23,7 @@ type AllSetting struct {
 	WebCertFile                 string `json:"webCertFile" form:"webCertFile"`
 	WebKeyFile                  string `json:"webKeyFile" form:"webKeyFile"`
 	WebBasePath                 string `json:"webBasePath" form:"webBasePath"`
+	MultiServer                 bool   `json:"multiServer" form:"multiServer"`
 	SessionMaxAge               int    `json:"sessionMaxAge" form:"sessionMaxAge"`
 	PageSize                    int    `json:"pageSize" form:"pageSize"`
 	ExpireDiff                  int    `json:"expireDiff" form:"expireDiff"`

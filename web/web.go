@@ -233,7 +233,13 @@ func (s *Server) initRouter() (*gin.Engine, error) {
 	s.server = controller.NewServerController(g)
 	s.panel = controller.NewXUIController(g)
 	s.api = controller.NewAPIController(g)
-	s.node = controller.NewNodeController(g)
+	multiServerEnabled, err := s.settingService.GetMultiServerEnabled()
+	if err != nil {
+		return nil, err
+	}
+	if multiServerEnabled {
+		s.node = controller.NewNodeController(g)
+	}
 
 	return engine, nil
 }

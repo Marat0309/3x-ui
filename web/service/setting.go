@@ -32,6 +32,7 @@ var defaultValueMap = map[string]string{
 	"webKeyFile":                  "",
 	"secret":                      random.Seq(32),
 	"webBasePath":                 "/",
+	"multiServer":                 "false",
 	"sessionMaxAge":               "360",
 	"pageSize":                    "50",
 	"expireDiff":                  "0",
@@ -527,6 +528,14 @@ func (s *SettingService) SetExternalTrafficInformURI(InformURI string) error {
 	return s.setString("externalTrafficInformURI", InformURI)
 }
 
+func (s *SettingService) GetMultiServerEnabled() (bool, error) {
+	return s.getBool("multiServer")
+}
+
+func (s *SettingService) SetMultiServerEnabled(value bool) error {
+	return s.setBool("multiServer", value)
+}
+
 func (s *SettingService) GetIpLimitEnable() (bool, error) {
 	accessLogPath, err := xray.GetAccessLogPath()
 	if err != nil {
@@ -546,6 +555,9 @@ func (s *SettingService) UpdateAllSetting(allSetting *entity.AllSetting) error {
 	errs := make([]error, 0)
 	for _, field := range fields {
 		key := field.Tag.Get("json")
+		if key == "multiServer" {
+			continue
+		}
 		fieldV := v.FieldByName(field.Name)
 		value := fmt.Sprint(fieldV.Interface())
 		err := s.saveSetting(key, value)

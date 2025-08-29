@@ -67,7 +67,10 @@ func (a *SettingController) updateSetting(c *gin.Context) {
 		jsonMsg(c, I18nWeb(c, "pages.settings.toasts.modifySettings"), err)
 		return
 	}
-	err = a.settingService.UpdateAllSetting(allSetting)
+	err = a.settingService.SetMultiServerEnabled(allSetting.MultiServer)
+	if err == nil {
+		err = a.settingService.UpdateAllSetting(allSetting)
+	}
 	jsonMsg(c, I18nWeb(c, "pages.settings.toasts.modifySettings"), err)
 }
 
