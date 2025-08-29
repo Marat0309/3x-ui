@@ -107,7 +107,7 @@
         mounted() {
             HttpUtil.post('/panel/setting/all').then(msg => {
                 if (msg.success) {
-                    this.multiServerEnabled = msg.obj.multiServer;
+                    this.multiServerEnabled = msg.obj.multiServerEnable;
                 }
             });
         },

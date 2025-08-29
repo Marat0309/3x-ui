@@ -77,6 +77,7 @@
 "ultraDark" = "超暗色"
 "dashboard" = "系统状态"
 "inbounds" = "入站列表"
+"nodes" = "节点"
 "settings" = "面板设置"
 "xray" = "Xray 设置"
 "logout" = "退出登录"
@@ -736,3 +737,5 @@
 "askToAddUserId" = "未找到您的配置！\r\n请向管理员询问，在您的配置中使用您的 Telegram 用户 ChatID。\r\n\r\n您的用户 ChatID：<code>{{ .TgUserID }}</code>"
 "chooseClient" = "为入站 {{ .Inbound }} 选择一个客户"
 "chooseInbound" = "选择一个入站"
+[pages.nodes]
+"title" = "节点"

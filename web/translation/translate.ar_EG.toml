@@ -77,6 +77,7 @@
 "ultraDark" = "داكن جدًا"
 "dashboard" = "نظرة عامة"
 "inbounds" = "الإدخالات"
+"nodes" = "العقد"
 "settings" = "إعدادات البانل"
 "xray" = "إعدادات Xray"
 "logout" = "تسجيل خروج"
@@ -736,3 +737,5 @@
 "askToAddUserId" = "مافيش إعدادات ليك!\r\nاطلب من الأدمن يضيف الـ Telegram ChatID الخاص بيك في إعداداتك.\r\n\r\nالـ ChatID بتاعك: <code>{{ .TgUserID }}</code>"
 "chooseClient" = "اختار عميل للإدخال {{ .Inbound }}"
 "chooseInbound" = "اختار الإدخال"
+[pages.nodes]
+"title" = "العقد"

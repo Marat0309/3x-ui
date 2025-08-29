@@ -77,6 +77,7 @@
 "ultraDark" = "Sangat Gelap"
 "dashboard" = "Ikhtisar"
 "inbounds" = "Masuk"
+"nodes" = "Node"
 "settings" = "Pengaturan Panel"
 "xray" = "Konfigurasi Xray"
 "logout" = "Keluar"
@@ -736,3 +737,5 @@
 "askToAddUserId" = "Konfigurasi Anda tidak ditemukan!\r\nSilakan minta admin Anda untuk menggunakan ChatID Telegram Anda dalam konfigurasi Anda.\r\n\r\nChatID Pengguna Anda: <code>{{ .TgUserID }}</code>"
 "chooseClient" = "Pilih Klien untuk Inbound {{ .Inbound }}"
 "chooseInbound" = "Pilih Inbound"
+[pages.nodes]
+"title" = "Node"
