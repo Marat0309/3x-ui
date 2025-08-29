@@ -271,6 +271,9 @@ func (s *Server) startTask() {
 	// check client ips from log file every 10 sec
 	s.cron.AddJob("@every 10s", job.NewCheckClientIpJob())
 
+	// periodically check remote nodes status
+	s.cron.AddJob("@every 1m", job.NewCheckNodeStatusJob())
+
 	// check client ips from log file every day
 	s.cron.AddJob("@daily", job.NewClearLogsJob())
 
