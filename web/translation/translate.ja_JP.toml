@@ -77,6 +77,7 @@
 "ultraDark" = "ウルトラダーク"
 "dashboard" = "ダッシュボード"
 "inbounds" = "インバウンド一覧"
+"nodes" = "ノード"
 "settings" = "パネル設定"
 "xray" = "Xray設定"
 "logout" = "ログアウト"
@@ -736,3 +737,5 @@
 "askToAddUserId" = "設定が見つかりませんでした！\r\n管理者に問い合わせて、設定にTelegramユーザーのChatIDを使用してください。\r\n\r\nあなたのユーザーChatID：<code>{{ .TgUserID }}</code>"
 "chooseClient" = "インバウンド {{ .Inbound }} のクライアントを選択"
 "chooseInbound" = "インバウンドを選択"
+[pages.nodes]
+"title" = "ノード"
