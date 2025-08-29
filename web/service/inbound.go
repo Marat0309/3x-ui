@@ -1,8 +1,11 @@
 package service
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"sort"
 	"strconv"
 	"strings"
@@ -19,6 +22,39 @@ import (
 
 type InboundService struct {
 	xrayApi xray.XrayAPI
+}
+
+func (s *InboundService) callNodeAPI(nodeID int, method, endpoint string, payload any) error {
+	db := database.GetDB()
+	node := &model.Node{}
+	if err := db.First(node, nodeID).Error; err != nil {
+		return err
+	}
+	var buf bytes.Buffer
+	if payload != nil {
+		if err := json.NewEncoder(&buf).Encode(payload); err != nil {
+			return err
+		}
+	}
+	url := strings.TrimRight(node.ApiURL, "/") + endpoint
+	req, err := http.NewRequest(method, url, &buf)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if node.ApiKey != "" {
+		req.Header.Set("Authorization", node.ApiKey)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= http.StatusBadRequest {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("node api error: %s", string(b))
+	}
+	return nil
 }
 
 func (s *InboundService) GetInbounds(userId int) ([]*model.Inbound, error) {
@@ -41,15 +77,15 @@ func (s *InboundService) GetAllInbounds() ([]*model.Inbound, error) {
 	return inbounds, nil
 }
 
-func (s *InboundService) checkPortExist(listen string, port int, ignoreId int) (bool, error) {
-	db := database.GetDB()
+func (s *InboundService) checkPortExist(nodeId int, listen string, port int, ignoreId int) (bool, error) {
+	db := database.GetDB().Model(model.Inbound{}).Where("node_id = ?", nodeId)
 	if listen == "" || listen == "0.0.0.0" || listen == "::" || listen == "::0" {
-		db = db.Model(model.Inbound{}).Where("port = ?", port)
+		db = db.Where("port = ?", port)
 	} else {
-		db = db.Model(model.Inbound{}).
+		db = db.
 			Where("port = ?", port).
 			Where(
-				db.Model(model.Inbound{}).Where(
+				database.GetDB().Model(model.Inbound{}).Where(
 					"listen = ?", listen,
 				).Or(
 					"listen = \"\"",
@@ -85,14 +121,15 @@ func (s *InboundService) GetClients(inbound *model.Inbound) ([]model.Client, err
 	return clients, nil
 }
 
-func (s *InboundService) getAllEmails() ([]string, error) {
+func (s *InboundService) getAllEmails(nodeId int) ([]string, error) {
 	db := database.GetDB()
 	var emails []string
 	err := db.Raw(`
-		SELECT JSON_EXTRACT(client.value, '$.email')
-		FROM inbounds,
-			JSON_EACH(JSON_EXTRACT(inbounds.settings, '$.clients')) AS client
-		`).Scan(&emails).Error
+                SELECT JSON_EXTRACT(client.value, '$.email')
+                FROM inbounds,
+                        JSON_EACH(JSON_EXTRACT(inbounds.settings, '$.clients')) AS client
+                WHERE inbounds.node_id = ?
+                `, nodeId).Scan(&emails).Error
 	if err != nil {
 		return nil, err
 	}
@@ -109,8 +146,8 @@ func (s *InboundService) contains(slice []string, str string) bool {
 	return false
 }
 
-func (s *InboundService) checkEmailsExistForClients(clients []model.Client) (string, error) {
-	allEmails, err := s.getAllEmails()
+func (s *InboundService) checkEmailsExistForClients(clients []model.Client, nodeId int) (string, error) {
+	allEmails, err := s.getAllEmails(nodeId)
 	if err != nil {
 		return "", err
 	}
@@ -134,7 +171,7 @@ func (s *InboundService) checkEmailExistForInbound(inbound *model.Inbound) (stri
 	if err != nil {
 		return "", err
 	}
-	allEmails, err := s.getAllEmails()
+	allEmails, err := s.getAllEmails(inbound.NodeID)
 	if err != nil {
 		return "", err
 	}
@@ -154,7 +191,7 @@ func (s *InboundService) checkEmailExistForInbound(inbound *model.Inbound) (stri
 }
 
 func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, bool, error) {
-	exist, err := s.checkPortExist(inbound.Listen, inbound.Port, 0)
+	exist, err := s.checkPortExist(inbound.NodeID, inbound.Listen, inbound.Port, 0)
 	if err != nil {
 		return inbound, false, err
 	}
@@ -234,12 +271,15 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 				s.AddClientStat(tx, inbound.Id, &client)
 			}
 		}
+		if inbound.NodeID > 0 {
+			err = s.callNodeAPI(inbound.NodeID, http.MethodPost, "/panel/inbound/add", inbound)
+		}
 	} else {
 		return inbound, false, err
 	}
 
 	needRestart := false
-	if inbound.Enable {
+	if inbound.Enable && inbound.NodeID == 0 {
 		s.xrayApi.Init(p.GetAPIPort())
 		inboundJson, err1 := json.MarshalIndent(inbound.GenXrayInboundConfig(), "", "  ")
 		if err1 != nil {
@@ -261,30 +301,35 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 
 func (s *InboundService) DelInbound(id int) (bool, error) {
 	db := database.GetDB()
-
-	var tag string
-	needRestart := false
-	result := db.Model(model.Inbound{}).Select("tag").Where("id = ? and enable = ?", id, true).First(&tag)
-	if result.Error == nil {
-		s.xrayApi.Init(p.GetAPIPort())
-		err1 := s.xrayApi.DelInbound(tag)
-		if err1 == nil {
-			logger.Debug("Inbound deleted by api:", tag)
-		} else {
-			logger.Debug("Unable to delete inbound by api:", err1)
-			needRestart = true
-		}
-		s.xrayApi.Close()
-	} else {
-		logger.Debug("No enabled inbound founded to removing by api", tag)
-	}
-
-	// Delete client traffics of inbounds
-	err := db.Where("inbound_id = ?", id).Delete(xray.ClientTraffic{}).Error
+	inbound, err := s.GetInbound(id)
 	if err != nil {
 		return false, err
 	}
-	inbound, err := s.GetInbound(id)
+	needRestart := false
+	if inbound.NodeID > 0 {
+		if err := s.callNodeAPI(inbound.NodeID, http.MethodPost, fmt.Sprintf("/panel/inbound/del/%d", id), nil); err != nil {
+			return false, err
+		}
+	} else {
+		var tag string
+		result := db.Model(model.Inbound{}).Select("tag").Where("id = ? and enable = ?", id, true).First(&tag)
+		if result.Error == nil {
+			s.xrayApi.Init(p.GetAPIPort())
+			err1 := s.xrayApi.DelInbound(tag)
+			if err1 == nil {
+				logger.Debug("Inbound deleted by api:", tag)
+			} else {
+				logger.Debug("Unable to delete inbound by api:", err1)
+				needRestart = true
+			}
+			s.xrayApi.Close()
+		} else {
+			logger.Debug("No enabled inbound founded to removing by api", tag)
+		}
+	}
+
+	// Delete client traffics of inbounds
+	err = db.Where("inbound_id = ?", id).Delete(xray.ClientTraffic{}).Error
 	if err != nil {
 		return false, err
 	}
@@ -293,8 +338,7 @@ func (s *InboundService) DelInbound(id int) (bool, error) {
 		return false, err
 	}
 	for _, client := range clients {
-		err := s.DelClientIPs(db, client.Email)
-		if err != nil {
+		if err := s.DelClientIPs(db, client.Email); err != nil {
 			return false, err
 		}
 	}
@@ -313,7 +357,7 @@ func (s *InboundService) GetInbound(id int) (*model.Inbound, error) {
 }
 
 func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, bool, error) {
-	exist, err := s.checkPortExist(inbound.Listen, inbound.Port, inbound.Id)
+	exist, err := s.checkPortExist(inbound.NodeID, inbound.Listen, inbound.Port, inbound.Id)
 	if err != nil {
 		return inbound, false, err
 	}
@@ -403,10 +447,18 @@ func (s *InboundService) UpdateInbound(inbound *model.Inbound) (*model.Inbound, 
 	oldInbound.Settings = inbound.Settings
 	oldInbound.StreamSettings = inbound.StreamSettings
 	oldInbound.Sniffing = inbound.Sniffing
+	oldInbound.NodeID = inbound.NodeID
 	if inbound.Listen == "" || inbound.Listen == "0.0.0.0" || inbound.Listen == "::" || inbound.Listen == "::0" {
 		oldInbound.Tag = fmt.Sprintf("inbound-%v", inbound.Port)
 	} else {
 		oldInbound.Tag = fmt.Sprintf("inbound-%v:%v", inbound.Listen, inbound.Port)
+	}
+
+	if oldInbound.NodeID > 0 {
+		if err := s.callNodeAPI(oldInbound.NodeID, http.MethodPost, fmt.Sprintf("/panel/inbound/update/%d", inbound.Id), inbound); err != nil {
+			return inbound, false, err
+		}
+		return inbound, false, tx.Save(oldInbound).Error
 	}
 
 	needRestart := false
@@ -503,17 +555,16 @@ func (s *InboundService) AddInboundClient(data *model.Inbound) (bool, error) {
 			interfaceClients[i] = cm
 		}
 	}
-	existEmail, err := s.checkEmailsExistForClients(clients)
+	oldInbound, err := s.GetInbound(data.Id)
+	if err != nil {
+		return false, err
+	}
+	existEmail, err := s.checkEmailsExistForClients(clients, oldInbound.NodeID)
 	if err != nil {
 		return false, err
 	}
 	if existEmail != "" {
 		return false, common.NewError("Duplicate email:", existEmail)
-	}
-
-	oldInbound, err := s.GetInbound(data.Id)
-	if err != nil {
-		return false, err
 	}
 
 	// Secure client ID
@@ -564,35 +615,42 @@ func (s *InboundService) AddInboundClient(data *model.Inbound) (bool, error) {
 	}()
 
 	needRestart := false
-	s.xrayApi.Init(p.GetAPIPort())
-	for _, client := range clients {
-		if len(client.Email) > 0 {
+	if oldInbound.NodeID > 0 {
+		for _, client := range clients {
 			s.AddClientStat(tx, data.Id, &client)
-			if client.Enable {
-				cipher := ""
-				if oldInbound.Protocol == "shadowsocks" {
-					cipher = oldSettings["method"].(string)
-				}
-				err1 := s.xrayApi.AddUser(string(oldInbound.Protocol), oldInbound.Tag, map[string]any{
-					"email":    client.Email,
-					"id":       client.ID,
-					"security": client.Security,
-					"flow":     client.Flow,
-					"password": client.Password,
-					"cipher":   cipher,
-				})
-				if err1 == nil {
-					logger.Debug("Client added by api:", client.Email)
-				} else {
-					logger.Debug("Error in adding client by api:", err1)
-					needRestart = true
-				}
-			}
-		} else {
-			needRestart = true
 		}
+		err = s.callNodeAPI(oldInbound.NodeID, http.MethodPost, "/panel/inbound/addClient", data)
+	} else {
+		s.xrayApi.Init(p.GetAPIPort())
+		for _, client := range clients {
+			if len(client.Email) > 0 {
+				s.AddClientStat(tx, data.Id, &client)
+				if client.Enable {
+					cipher := ""
+					if oldInbound.Protocol == "shadowsocks" {
+						cipher = oldSettings["method"].(string)
+					}
+					err1 := s.xrayApi.AddUser(string(oldInbound.Protocol), oldInbound.Tag, map[string]any{
+						"email":    client.Email,
+						"id":       client.ID,
+						"security": client.Security,
+						"flow":     client.Flow,
+						"password": client.Password,
+						"cipher":   cipher,
+					})
+					if err1 == nil {
+						logger.Debug("Client added by api:", client.Email)
+					} else {
+						logger.Debug("Error in adding client by api:", err1)
+						needRestart = true
+					}
+				}
+			} else {
+				needRestart = true
+			}
+		}
+		s.xrayApi.Close()
 	}
-	s.xrayApi.Close()
 
 	return needRestart, tx.Save(oldInbound).Error
 }
@@ -666,20 +724,27 @@ func (s *InboundService) DelInboundClient(inboundId int, clientId string) (bool,
 			return false, err
 		}
 		if needApiDel && notDepleted {
-			s.xrayApi.Init(p.GetAPIPort())
-			err1 := s.xrayApi.RemoveUser(oldInbound.Tag, email)
-			if err1 == nil {
-				logger.Debug("Client deleted by api:", email)
-				needRestart = false
-			} else {
-				if strings.Contains(err1.Error(), fmt.Sprintf("User %s not found.", email)) {
-					logger.Debug("User is already deleted. Nothing to do more...")
-				} else {
-					logger.Debug("Error in deleting client by api:", err1)
-					needRestart = true
+			if oldInbound.NodeID > 0 {
+				err = s.callNodeAPI(oldInbound.NodeID, http.MethodPost, fmt.Sprintf("/panel/inbound/%d/delClient/%s", inboundId, clientId), nil)
+				if err != nil {
+					return false, err
 				}
+			} else {
+				s.xrayApi.Init(p.GetAPIPort())
+				err1 := s.xrayApi.RemoveUser(oldInbound.Tag, email)
+				if err1 == nil {
+					logger.Debug("Client deleted by api:", email)
+					needRestart = false
+				} else {
+					if strings.Contains(err1.Error(), fmt.Sprintf("User %s not found.", email)) {
+						logger.Debug("User is already deleted. Nothing to do more...")
+					} else {
+						logger.Debug("Error in deleting client by api:", err1)
+						needRestart = true
+					}
+				}
+				s.xrayApi.Close()
 			}
-			s.xrayApi.Close()
 		}
 	}
 	return needRestart, db.Save(oldInbound).Error
@@ -738,7 +803,7 @@ func (s *InboundService) UpdateInboundClient(data *model.Inbound, clientId strin
 	}
 
 	if len(clients[0].Email) > 0 && clients[0].Email != oldEmail {
-		existEmail, err := s.checkEmailsExistForClients(clients)
+		existEmail, err := s.checkEmailsExistForClients(clients, oldInbound.NodeID)
 		if err != nil {
 			return false, err
 		}
@@ -816,6 +881,10 @@ func (s *InboundService) UpdateInboundClient(data *model.Inbound, clientId strin
 		}
 	}
 	needRestart := false
+	if oldInbound.NodeID > 0 {
+		err = s.callNodeAPI(oldInbound.NodeID, http.MethodPost, fmt.Sprintf("/panel/inbound/updateClient/%s", clientId), data)
+		return false, tx.Save(oldInbound).Error
+	}
 	if len(oldEmail) > 0 {
 		s.xrayApi.Init(p.GetAPIPort())
 		if oldClients[clientIndex].Enable {

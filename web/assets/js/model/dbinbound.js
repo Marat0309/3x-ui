@@ -3,6 +3,7 @@ class DBInbound {
     constructor(data) {
         this.id = 0;
         this.userId = 0;
+        this.nodeId = 0;
         this.up = 0;
         this.down = 0;
         this.total = 0;
