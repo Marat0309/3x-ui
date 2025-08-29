@@ -1,6 +1,8 @@
 package service
 
 import (
+	"errors"
+
 	"x-ui/database"
 	"x-ui/database/model"
 
@@ -27,6 +29,9 @@ func (s *NodeService) Get(id int) (*model.Node, error) {
 	db := database.GetDB()
 	node := &model.Node{}
 	err := db.First(node, id).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, gorm.ErrRecordNotFound
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -35,18 +40,14 @@ func (s *NodeService) Get(id int) (*model.Node, error) {
 
 func (s *NodeService) Update(id int, name, apiURL, apiKey string) error {
 	db := database.GetDB()
-	res := db.Model(&model.Node{}).Where("id = ?", id).Updates(map[string]any{
-		"name":    name,
-		"api_url": apiURL,
-		"api_key": apiKey,
-	})
-	if res.Error != nil {
-		return res.Error
+	node := &model.Node{}
+	if err := db.First(node, id).Error; err != nil {
+		return err
 	}
-	if res.RowsAffected == 0 {
-		return gorm.ErrRecordNotFound
-	}
-	return nil
+	node.Name = name
+	node.ApiURL = apiURL
+	node.ApiKey = apiKey
+	return db.Save(node).Error
 }
 
 func (s *NodeService) Delete(id int) error {
